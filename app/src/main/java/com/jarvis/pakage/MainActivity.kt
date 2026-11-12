@@ -55,6 +55,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -65,6 +67,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jarvis.pakage.ui.theme.JarvisTheme
+import kotlinx.coroutines.launch
 
 private const val PREFS_NAME = "jarvis_preferences"
 private const val THEME_MODE_KEY = "theme_mode"
@@ -111,7 +114,9 @@ private fun JarvisApp(
 ) {
     var message by rememberSaveable { mutableStateOf("") }
     var selectedTab by rememberSaveable { mutableStateOf(0) }
-    var lastSubmittedMessage by rememberSaveable { mutableStateOf("") }
+    val chatMessages = remember { mutableStateListOf<ChatMessage>() }
+    var isLoading by rememberSaveable { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
 
     val actions = listOf(
         QuickAction("Phone Manager", "Calls, contacts & SMS", Icons.Default.Phone, 1),
@@ -185,13 +190,25 @@ private fun JarvisApp(
                 message = message,
                 onMessageChange = { message = it },
                 onSend = {
-                    if (message.isNotBlank()) {
-                        lastSubmittedMessage = message.trim()
+                    val prompt = message.trim()
+                    if (prompt.isNotEmpty() && !isLoading) {
+                        chatMessages.add(ChatMessage(prompt, true))
                         message = ""
+                        isLoading = true
+                        coroutineScope.launch {
+                            try {
+                                chatMessages.add(ChatMessage(AiRepository.ask(prompt), false))
+                            } catch (error: Exception) {
+                                chatMessages.add(ChatMessage(error.message ?: "AI request failed.", false))
+                            } finally {
+                                isLoading = false
+                            }
+                        }
                     }
                 },
                 onActionClick = { selectedTab = it },
-                lastSubmittedMessage = lastSubmittedMessage
+                chatMessages = chatMessages,
+                isLoading = isLoading
             )
             1 -> ToolsScreen(Modifier.padding(innerPadding))
             2 -> VideoStudioScreen(Modifier.padding(innerPadding))
@@ -212,7 +229,8 @@ private fun HomeScreen(
     onMessageChange: (String) -> Unit,
     onSend: () -> Unit,
     onActionClick: (Int) -> Unit,
-    lastSubmittedMessage: String
+    chatMessages: List<ChatMessage>,
+    isLoading: Boolean
 ) {
     LazyColumn(
         modifier = modifier
@@ -307,18 +325,35 @@ private fun HomeScreen(
                 shape = RoundedCornerShape(18.dp),
                 singleLine = true
             )
-            if (lastSubmittedMessage.isNotBlank()) {
-                Text(
-                    "Last draft: $lastSubmittedMessage",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-                Text(
-                    "AI replies will be enabled in Phase 2.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.secondary
-                )
+            if (chatMessages.isNotEmpty()) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    chatMessages.forEach { chat ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = if (chat.fromUser) Arrangement.End else Arrangement.Start
+                        ) {
+                            Surface(
+                                color = if (chat.fromUser) MaterialTheme.colorScheme.primaryContainer
+                                    else MaterialTheme.colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Text(
+                                    chat.text,
+                                    modifier = Modifier.widthIn(max = 300.dp).padding(12.dp),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
+                    }
+                    if (isLoading) {
+                        Text("JARVIS is thinking…", style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.secondary)
+                    }
+                }
             }
         }
         item { Spacer(Modifier.height(12.dp)) }
