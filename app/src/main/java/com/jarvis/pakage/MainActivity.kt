@@ -48,6 +48,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
@@ -694,88 +698,200 @@ private fun ToolsScreen(modifier: Modifier = Modifier) {
     }
 }
 
+private data class ReelClip(
+    val uri: Uri,
+    val durationSeconds: Int = 5
+)
+
 @Composable
 private fun VideoStudioScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    var selectedPhoto by rememberSaveable { mutableStateOf<Uri?>(null) }
+    val clips = remember { mutableStateListOf<ReelClip>() }
     var reelText by rememberSaveable { mutableStateOf("") }
-    var duration by rememberSaveable { mutableStateOf("15") }
-    var status by rememberSaveable { mutableStateOf("Choose a photo to start your daily reel.") }
+    var durationText by rememberSaveable { mutableStateOf("5") }
+    var aspectRatio by rememberSaveable { mutableStateOf("9:16") }
+    var transition by rememberSaveable { mutableStateOf("Fade") }
+    var projectName by rememberSaveable { mutableStateOf("My Reel") }
+    var status by rememberSaveable { mutableStateOf("Add multiple photos to build your video timeline.") }
+
     val photoPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri ->
-        selectedPhoto = uri
-        status = if (uri != null) "Photo selected. Add your reel caption." else "No photo selected."
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            uris.forEach { uri ->
+                runCatching {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                }
+                if (clips.none { it.uri == uri }) clips.add(ReelClip(uri))
+            }
+            status = "${uris.size} photo(s) added to your timeline."
+        }
     }
-    val photoBitmap = remember(selectedPhoto) {
-        selectedPhoto?.let { uri ->
+
+    val totalSeconds = clips.sumOf { it.durationSeconds }
+    val previewBitmap = remember(clips.firstOrNull()?.uri) {
+        clips.firstOrNull()?.uri?.let { uri ->
             runCatching {
                 context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
             }.getOrNull()
         }
     }
 
-    LazyColumn(modifier = modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
         item {
-            Text("Daily Reel Maker", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text("Create a 9:16 devotional or social reel draft.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Advanced Video Studio", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("Build a multi-photo reel with a timeline, captions and editing settings.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         item {
             Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-                Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Icon(Icons.Default.Movie, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(34.dp))
-                    Text("Reel project", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    if (photoBitmap != null) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = projectName,
+                        onValueChange = { projectName = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("Project name") }
+                    )
+                    if (previewBitmap != null) {
                         ComposeImage(
-                            bitmap = photoBitmap.asImageBitmap(),
-                            contentDescription = "Selected reel photo",
-                            modifier = Modifier.fillMaxWidth().height(260.dp).clip(RoundedCornerShape(16.dp)),
+                            bitmap = previewBitmap.asImageBitmap(),
+                            contentDescription = "First timeline photo",
+                            modifier = Modifier.fillMaxWidth().height(250.dp).clip(RoundedCornerShape(16.dp)),
                             contentScale = ContentScale.Crop
                         )
                     } else {
                         Box(
-                            Modifier.fillMaxWidth().height(170.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+                            Modifier.fillMaxWidth().height(180.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(42.dp), tint = MaterialTheme.colorScheme.primary)
-                                Text("Your 9:16 photo preview")
+                                Icon(Icons.Default.Movie, contentDescription = null, modifier = Modifier.size(42.dp), tint = MaterialTheme.colorScheme.primary)
+                                Text("9:16 video preview")
                             }
                         }
                     }
-                    Button(modifier = Modifier.fillMaxWidth(), onClick = { photoPicker.launch("image/*") }) {
-                        Icon(Icons.Default.Image, contentDescription = null)
+                    Button(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { photoPicker.launch(arrayOf("image/*")) }
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text(if (selectedPhoto == null) "Choose photo" else "Change photo")
+                        Text("Add photos to timeline")
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Canvas:", fontWeight = FontWeight.SemiBold)
+                        listOf("9:16", "1:1", "16:9").forEach { ratio ->
+                            OutlinedButton(onClick = { aspectRatio = ratio }) {
+                                Text(if (aspectRatio == ratio) "✓ $ratio" else ratio)
+                            }
+                        }
                     }
                     OutlinedTextField(
                         value = reelText,
                         onValueChange = { reelText = it },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Reel caption / on-screen text") },
+                        label = { Text("On-screen text / caption") },
                         minLines = 2
                     )
-                    OutlinedTextField(
-                        value = duration,
-                        onValueChange = { duration = it.filter(Char::isDigit).take(3) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        label = { Text("Video duration in seconds (5–60)") }
-                    )
-                    Text(
-                        "Format: 9:16 vertical • Photo + caption • Slow zoom template planned",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(status, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Transition:")
+                        listOf("Fade", "Cut", "Slide").forEach { item ->
+                            OutlinedButton(onClick = { transition = item }) {
+                                Text(if (transition == item) "✓ $item" else item)
+                            }
+                        }
+                    }
                 }
             }
         }
         item {
-            Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-                Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Next: Render & export", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text("This first Phase 6 step creates a reel project draft with a selected photo, caption and duration. MP4 rendering, audio, transitions and Gallery export are the next implementation tasks.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Timeline", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.weight(1f))
+                Text("${clips.size} clips • ${totalSeconds}s", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+            }
+            Text("Move clips up/down to change their order. Each photo becomes one video segment.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (clips.isEmpty()) {
+            item {
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                    Text("Your timeline is empty. Tap “Add photos to timeline” to begin.", modifier = Modifier.padding(18.dp))
+                }
+            }
+        }
+        items(clips.size, key = { clips[it].uri.toString() }) { index ->
+            val clip = clips[index]
+            Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Row(
+                    Modifier.fillMaxWidth().padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        Modifier.size(56.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("${index + 1}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Photo ${index + 1}", fontWeight = FontWeight.SemiBold)
+                        Text("${clip.durationSeconds} seconds", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedButton(onClick = {
+                                if (clip.durationSeconds > 1) clips[index] = clip.copy(durationSeconds = clip.durationSeconds - 1)
+                            }) { Text("−") }
+                            Text("  ${clip.durationSeconds}s  ")
+                            OutlinedButton(onClick = {
+                                if (clip.durationSeconds < 30) clips[index] = clip.copy(durationSeconds = clip.durationSeconds + 1)
+                            }) { Text("+") }
+                        }
+                    }
+                    Column {
+                        IconButton(onClick = {
+                            if (index > 0) {
+                                val current = clips[index]
+                                clips[index] = clips[index - 1]
+                                clips[index - 1] = current
+                            }
+                        }, enabled = index > 0) { Icon(Icons.Default.ArrowUpward, contentDescription = "Move clip up") }
+                        IconButton(onClick = {
+                            if (index < clips.lastIndex) {
+                                val current = clips[index]
+                                clips[index] = clips[index + 1]
+                                clips[index + 1] = current
+                            }
+                        }, enabled = index < clips.lastIndex) { Icon(Icons.Default.ArrowDownward, contentDescription = "Move clip down") }
+                        IconButton(onClick = { clips.removeAt(index) }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Remove clip", tint = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Export settings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("Project: $projectName")
+                    Text("Canvas: $aspectRatio • Transition: $transition")
+                    Text("Estimated duration: $totalSeconds seconds")
+                    Text("MP4 rendering, music/voice-over mixing and Gallery export are not connected yet. This phase is building the editor and timeline first.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Button(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { status = "Project settings ready. MP4 export engine is the next implementation step." },
+                        enabled = clips.isNotEmpty()
+                    ) {
+                        Icon(Icons.Default.Movie, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Prepare video project")
+                    }
+                    Text(status, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
