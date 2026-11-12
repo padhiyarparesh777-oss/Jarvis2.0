@@ -42,7 +42,6 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
-          retention-days: 14
       - name: Restore release keystore
         if: github.event_name != 'pull_request'
         shell: bash
@@ -66,3 +65,4 @@ jobs:
           name: jarvis-release-apk
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
+          retention-days: 14
