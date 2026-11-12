@@ -1,5 +1,6 @@
 package com.jarvis.pakage
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -10,23 +11,23 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Phone
@@ -34,6 +35,8 @@ import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -42,6 +45,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -52,6 +56,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,12 +66,31 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jarvis.pakage.ui.theme.JarvisTheme
 
+private const val PREFS_NAME = "jarvis_preferences"
+private const val THEME_MODE_KEY = "theme_mode"
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val preferences = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val initialTheme = preferences.getString(THEME_MODE_KEY, "system") ?: "system"
+
         setContent {
-            JarvisTheme {
-                JarvisApp()
+            var themeMode by rememberSaveable { mutableStateOf(initialTheme) }
+            val darkTheme = when (themeMode) {
+                "light" -> false
+                "dark" -> true
+                else -> androidx.compose.foundation.isSystemInDarkTheme()
+            }
+
+            JarvisTheme(darkTheme = darkTheme) {
+                JarvisApp(
+                    themeMode = themeMode,
+                    onThemeChange = { newMode ->
+                        themeMode = newMode
+                        preferences.edit().putString(THEME_MODE_KEY, newMode).apply()
+                    }
+                )
             }
         }
     }
@@ -75,20 +99,25 @@ class MainActivity : ComponentActivity() {
 private data class QuickAction(
     val title: String,
     val subtitle: String,
-    val icon: ImageVector
+    val icon: ImageVector,
+    val destination: Int
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun JarvisApp() {
-    var message by remember { mutableStateOf("") }
-    var selectedTab by remember { mutableStateOf(0) }
+private fun JarvisApp(
+    themeMode: String,
+    onThemeChange: (String) -> Unit
+) {
+    var message by rememberSaveable { mutableStateOf("") }
+    var selectedTab by rememberSaveable { mutableStateOf(0) }
+    var lastSubmittedMessage by rememberSaveable { mutableStateOf("") }
 
     val actions = listOf(
-        QuickAction("Phone Manager", "Calls, contacts & SMS", Icons.Default.Phone),
-        QuickAction("Email Manager", "Gmail & messages", Icons.Default.Email),
-        QuickAction("Reminders", "Tasks & calendar", Icons.Default.CalendarMonth),
-        QuickAction("Video Studio", "Create daily reels", Icons.Default.Movie)
+        QuickAction("Phone Manager", "Calls, contacts & SMS", Icons.Default.Phone, 1),
+        QuickAction("Email Manager", "Gmail & messages", Icons.Default.Email, 1),
+        QuickAction("Reminders", "Tasks & calendar", Icons.Default.CalendarMonth, 1),
+        QuickAction("Video Studio", "Create daily reels", Icons.Default.Movie, 2)
     )
 
     Scaffold(
@@ -149,21 +178,57 @@ private fun JarvisApp() {
             }
         }
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .padding(innerPadding)
-                .padding(horizontal = 20.dp)
-        ) {
-            Spacer(Modifier.height(18.dp))
+        when (selectedTab) {
+            0 -> HomeScreen(
+                modifier = Modifier.padding(innerPadding),
+                actions = actions,
+                message = message,
+                onMessageChange = { message = it },
+                onSend = {
+                    if (message.isNotBlank()) {
+                        lastSubmittedMessage = message.trim()
+                        message = ""
+                    }
+                },
+                onActionClick = { selectedTab = it },
+                lastSubmittedMessage = lastSubmittedMessage
+            )
+            1 -> ToolsScreen(Modifier.padding(innerPadding))
+            2 -> VideoStudioScreen(Modifier.padding(innerPadding))
+            else -> SettingsScreen(
+                modifier = Modifier.padding(innerPadding),
+                themeMode = themeMode,
+                onThemeChange = onThemeChange
+            )
+        }
+    }
+}
 
+@Composable
+private fun HomeScreen(
+    modifier: Modifier = Modifier,
+    actions: List<QuickAction>,
+    message: String,
+    onMessageChange: (String) -> Unit,
+    onSend: () -> Unit,
+    onActionClick: (Int) -> Unit,
+    lastSubmittedMessage: String
+) {
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item { Spacer(Modifier.height(2.dp)) }
+        item {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(28.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(vertical = 28.dp, horizontal = 20.dp),
+                    .padding(vertical = 26.dp, horizontal = 20.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -182,23 +247,16 @@ private fun JarvisApp() {
                         }
                     }
                     Spacer(Modifier.height(14.dp))
-                    Text(
-                        "Hello Tittu!",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text("Hello Tittu!", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     Text(
                         "I'm ready to help you today.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.height(10.dp))
-                    Surface(
-                        shape = RoundedCornerShape(50),
-                        color = MaterialTheme.colorScheme.secondaryContainer
-                    ) {
+                    Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.secondaryContainer) {
                         Text(
-                            "●  Hybrid AI • Ready",
+                            "●  Hybrid AI • UI preview",
                             modifier = Modifier.padding(horizontal = 13.dp, vertical = 7.dp),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
@@ -206,78 +264,175 @@ private fun JarvisApp() {
                     }
                 }
             }
-
-            Spacer(Modifier.height(24.dp))
-            Text(
-                "Quick Actions",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(Modifier.height(12.dp))
-
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.weight(1f, fill = false)
-            ) {
-                items(actions.size) { index ->
-                    val action = actions[index]
+        }
+        item {
+            Text("Quick Actions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        }
+        items(actions.chunked(2)) { rowActions ->
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                rowActions.forEach { action ->
                     Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(118.dp)
-                            .clickable { selectedTab = if (index == 3) 2 else 1 },
+                        modifier = Modifier.weight(1f).height(124.dp).clickable { onActionClick(action.destination) },
                         shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surface
-                        ),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                     ) {
                         Column(
-                            modifier = Modifier.padding(16.dp),
+                            modifier = Modifier.fillMaxSize().padding(16.dp),
                             verticalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Icon(
-                                action.icon,
-                                contentDescription = action.title,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(27.dp)
-                            )
+                            Icon(action.icon, contentDescription = action.title, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(27.dp))
                             Column {
                                 Text(action.title, fontWeight = FontWeight.SemiBold)
-                                Text(
-                                    action.subtitle,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Text(action.subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
                 }
+                if (rowActions.size == 1) Spacer(Modifier.weight(1f))
             }
-
-            Spacer(Modifier.height(18.dp))
-            Text(
-                "Ask JARVIS anything",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(Modifier.height(8.dp))
+        }
+        item {
+            Text("Ask JARVIS anything", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             OutlinedTextField(
                 value = message,
-                onValueChange = { message = it },
+                onValueChange = onMessageChange,
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("Message JARVIS...") },
                 trailingIcon = {
-                    IconButton(onClick = { message = "" }, enabled = message.isNotBlank()) {
-                        Icon(Icons.Default.Send, contentDescription = "Clear message")
+                    IconButton(onClick = onSend, enabled = message.isNotBlank()) {
+                        Icon(Icons.Default.Send, contentDescription = "Send message")
                     }
                 },
                 shape = RoundedCornerShape(18.dp),
                 singleLine = true
             )
-            Spacer(Modifier.height(12.dp))
+            if (lastSubmittedMessage.isNotBlank()) {
+                Text(
+                    "Last draft: $lastSubmittedMessage",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                Text(
+                    "AI replies will be enabled in Phase 2.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
         }
+        item { Spacer(Modifier.height(12.dp)) }
+    }
+}
+
+@Composable
+private fun ToolsScreen(modifier: Modifier = Modifier) {
+    val tools = listOf(
+        "Phone Manager" to "Calls, contacts and SMS actions",
+        "WhatsApp" to "Prepare messages for your approval",
+        "Email Manager" to "Connect Gmail securely",
+        "Calendar" to "Events, tasks and reminders",
+        "Notifications" to "Review notifications with permission",
+        "Device Health" to "Battery and storage overview"
+    )
+    LazyColumn(modifier = modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item {
+            Text("Tools & Phone Manager", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("Device features will become available as each module is implemented.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        items(tools) { tool ->
+            Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Text(tool.first, fontWeight = FontWeight.SemiBold)
+                    Text(tool.second, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun VideoStudioScreen(modifier: Modifier = Modifier) {
+    LazyColumn(modifier = modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        item {
+            Text("Daily Reel Maker", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("Your simple photo + text video workflow.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        item {
+            Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(Icons.Default.Movie, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(34.dp))
+                    Text("Daily Reel Template", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("New photo • New text • Slow zoom • Fade in/out • 9:16 MP4", style = MaterialTheme.typography.bodyMedium)
+                    Text("FFmpeg rendering and automatic Gallery export are planned for Phase 6.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        item {
+            Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Image, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp))
+                    Text("Photo library", fontWeight = FontWeight.SemiBold)
+                    Text("Choose a daily image source and text style when the video module is implemented.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsScreen(
+    modifier: Modifier = Modifier,
+    themeMode: String,
+    onThemeChange: (String) -> Unit
+) {
+    LazyColumn(modifier = modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        item {
+            Text("Settings", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("Personalize your JARVIS experience.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        item {
+            Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Text("Appearance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("Choose how JARVIS looks.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    ThemeOption("System default", "system", themeMode, Icons.Default.BrightnessAuto, onThemeChange)
+                    ThemeOption("Light mode", "light", themeMode, Icons.Default.WbSunny, onThemeChange)
+                    ThemeOption("Dark mode", "dark", themeMode, Icons.Default.DarkMode, onThemeChange)
+                }
+            }
+        }
+        item {
+            Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("App information", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("JARVIS 2.0", fontWeight = FontWeight.Medium)
+                    Text("Package: com.jarvis.pakage", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Version: 1.0.0 • Phase 1 UI foundation", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemeOption(
+    title: String,
+    value: String,
+    selected: String,
+    icon: ImageVector,
+    onSelected: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { onSelected(value) }.padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.width(12.dp))
+        Text(title, modifier = Modifier.weight(1f))
+        if (selected == value) {
+            Icon(Icons.Default.CheckCircle, contentDescription = "Selected", tint = MaterialTheme.colorScheme.primary)
+        }
+        RadioButton(selected = selected == value, onClick = { onSelected(value) })
     }
 }
