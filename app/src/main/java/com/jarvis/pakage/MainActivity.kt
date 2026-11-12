@@ -1,6 +1,14 @@
 package com.jarvis.pakage
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.BatteryManager
+import android.provider.ContactsContract
+import android.provider.Settings
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.platform.LocalContext
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -361,28 +369,180 @@ private fun HomeScreen(
     }
 }
 
+private data class InstalledApp(
+    val label: String,
+    val packageName: String
+)
+
 @Composable
 private fun ToolsScreen(modifier: Modifier = Modifier) {
-    val tools = listOf(
-        "Phone Manager" to "Calls, contacts and SMS actions",
-        "WhatsApp" to "Prepare messages for your approval",
-        "Email Manager" to "Connect Gmail securely",
-        "Calendar" to "Events, tasks and reminders",
-        "Notifications" to "Review notifications with permission",
-        "Device Health" to "Battery and storage overview"
-    )
-    LazyColumn(modifier = modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
-            Text("Tools & Phone Manager", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text("Device features will become available as each module is implemented.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val context = LocalContext.current
+    var search by rememberSaveable { mutableStateOf("") }
+    var actionMessage by rememberSaveable { mutableStateOf("") }
+
+    val installedApps = remember(context) {
+        val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        context.packageManager.queryIntentActivities(launcherIntent, 0)
+            .mapNotNull { resolveInfo ->
+                val activity = resolveInfo.activityInfo ?: return@mapNotNull null
+                InstalledApp(
+                    label = resolveInfo.loadLabel(context.packageManager).toString(),
+                    packageName = activity.packageName
+                )
+            }
+            .distinctBy { it.packageName }
+            .sortedBy { it.label.lowercase() }
+    }
+
+    val batteryPercent = remember(context) {
+        val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+        batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+    }
+
+    val filteredApps = installedApps.filter {
+        it.label.contains(search, ignoreCase = true) ||
+            it.packageName.contains(search, ignoreCase = true)
+    }
+
+    fun openIntent(intent: Intent, successMessage: String) {
+        try {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            actionMessage = successMessage
+        } catch (_: Exception) {
+            actionMessage = "Ye action is device par available nahi hai."
         }
-        items(tools) { tool ->
+    }
+
+    LazyColumn(
+        modifier = modifier.fillMaxSize().padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Text("Phone Manager", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(
+                "JARVIS ke through phone ke basic actions control karo.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        item {
             Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-                Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    Text(tool.first, fontWeight = FontWeight.SemiBold)
-                    Text(tool.second, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Quick phone actions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            modifier = Modifier.weight(1f),
+                            onClick = { openIntent(Intent(Intent.ACTION_DIAL), "Phone dialer opened.") }
+                        ) {
+                            Icon(Icons.Default.Phone, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Dialer")
+                        }
+                        OutlinedButton(
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                openIntent(
+                                    Intent(Intent.ACTION_PICK, ContactsContract.Contacts.CONTENT_URI),
+                                    "Choose a contact from your contacts."
+                                )
+                            }
+                        ) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Contacts")
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                openIntent(
+                                    Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:")),
+                                    "SMS composer opened. Review before sending."
+                                )
+                            }
+                        ) {
+                            Icon(Icons.Default.Message, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("New SMS")
+                        }
+                        OutlinedButton(
+                            modifier = Modifier.weight(1f),
+                            onClick = { openIntent(Intent(Settings.ACTION_SETTINGS), "Android Settings opened.") }
+                        ) {
+                            Icon(Icons.Default.Settings, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Settings")
+                        }
+                    }
+                    Text(
+                        "Battery: ${if (batteryPercent in 0..100) "$batteryPercent%" else "Not available"}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (actionMessage.isNotBlank()) {
+                        Text(actionMessage, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
+        }
+        item {
+            Text("Installed apps", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            OutlinedTextField(
+                value = search,
+                onValueChange = { search = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                placeholder = { Text("Search apps...") },
+                shape = RoundedCornerShape(16.dp)
+            )
+            Text(
+                "${filteredApps.size} apps found • Tap an app to open",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        items(filteredApps, key = { it.packageName }) { app ->
+            Card(
+                modifier = Modifier.fillMaxWidth().clickable {
+                    val launchIntent = context.packageManager.getLaunchIntentForPackage(app.packageName)
+                    if (launchIntent != null) openIntent(launchIntent, "Opened ${app.label}.")
+                    else actionMessage = "Is app ko launch nahi kiya ja sakta."
+                },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        modifier = Modifier.size(38.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.GridView, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(app.label, fontWeight = FontWeight.SemiBold)
+                        Text(app.packageName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Icon(Icons.Default.Send, contentDescription = "Open ${app.label}", tint = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
+        if (filteredApps.isEmpty()) {
+            item { Text("No matching apps found.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+        item {
+            Text(
+                "JARVIS opens the selected app or Android screen. Calls and messages are not sent automatically.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
