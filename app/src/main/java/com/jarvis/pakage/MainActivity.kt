@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.BatteryManager
 import android.provider.ContactsContract
+import android.provider.CalendarContract
 import android.provider.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
@@ -486,6 +487,44 @@ private fun ToolsScreen(modifier: Modifier = Modifier) {
                 }
             }
         }
+        item {
+            Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Google & Productivity", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("Quick access to your Google productivity apps.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(modifier = Modifier.weight(1f), onClick = {
+                            val gmail = context.packageManager.getLaunchIntentForPackage("com.google.android.gm")
+                            if (gmail != null) openIntent(gmail, "Gmail opened.")
+                            else openIntent(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:")), "Email app chooser opened.")
+                        }) { Icon(Icons.Default.Email, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Gmail") }
+                        OutlinedButton(modifier = Modifier.weight(1f), onClick = {
+                            openIntent(Intent(Intent.ACTION_VIEW, Uri.parse("content://com.android.calendar/time/" + System.currentTimeMillis())), "Calendar opened.")
+                        }) { Icon(Icons.Default.CalendarMonth, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Calendar") }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(modifier = Modifier.weight(1f), onClick = {
+                            val drive = context.packageManager.getLaunchIntentForPackage("com.google.android.apps.docs")
+                            if (drive != null) openIntent(drive, "Google Drive opened.") else actionMessage = "Google Drive app is not installed."
+                        }) { Icon(Icons.Default.GridView, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Drive") }
+                        OutlinedButton(modifier = Modifier.weight(1f), onClick = {
+                            val photos = context.packageManager.getLaunchIntentForPackage("com.google.android.apps.photos")
+                            if (photos != null) openIntent(photos, "Google Photos opened.") else actionMessage = "Google Photos app is not installed."
+                        }) { Icon(Icons.Default.Image, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Photos") }
+                    }
+                    OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = {
+                        val start = System.currentTimeMillis() + 60 * 60 * 1000
+                        val createEvent = Intent(Intent.ACTION_INSERT).setData(CalendarContract.Events.CONTENT_URI)
+                            .putExtra(CalendarContract.Events.TITLE, "JARVIS reminder")
+                            .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, start)
+                            .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, start + 30 * 60 * 1000)
+                        openIntent(createEvent, "Calendar event form opened. Review and save it.")
+                    }) { Icon(Icons.Default.CalendarMonth, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Create calendar event") }
+                    Text("These shortcuts open Google apps or Android Calendar. Direct account sync and Gmail, Drive, Photos data access need Google OAuth consent and will be added separately.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+
         item {
             Text("Installed apps", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             OutlinedTextField(
