@@ -1,6 +1,18 @@
 package com.jarvis.pakage
 
 import android.content.Context
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.workDataOf
+import java.util.UUID
+import java.util.concurrent.TimeUnit
 import android.content.Intent
 import android.net.Uri
 import android.os.BatteryManager
@@ -380,6 +392,42 @@ private fun ToolsScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     var search by rememberSaveable { mutableStateOf("") }
     var actionMessage by rememberSaveable { mutableStateOf("") }
+    var reminderTitle by rememberSaveable { mutableStateOf("") }
+    var reminderMessage by rememberSaveable { mutableStateOf("") }
+    var reminderMinutes by rememberSaveable { mutableStateOf("10") }
+    var reminderStatus by rememberSaveable { mutableStateOf("") }
+
+    fun scheduleReminder() {
+        val delayMinutes = reminderMinutes.toLongOrNull()
+        if (reminderTitle.isBlank() || delayMinutes == null || delayMinutes < 1L) {
+            reminderStatus = "Title aur 1 ya usse zyada minutes enter karo."
+            return
+        }
+        val request = OneTimeWorkRequestBuilder<JarvisReminderWorker>()
+            .setInputData(
+                workDataOf(
+                    JarvisReminderWorker.KEY_TITLE to reminderTitle.trim(),
+                    JarvisReminderWorker.KEY_MESSAGE to reminderMessage.trim()
+                )
+            )
+            .setInitialDelay(delayMinutes, TimeUnit.MINUTES)
+            .build()
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            UUID.randomUUID().toString(),
+            ExistingWorkPolicy.REPLACE,
+            request
+        )
+        reminderStatus = "Reminder scheduled in $delayMinutes minutes."
+        reminderTitle = ""
+        reminderMessage = ""
+    }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) scheduleReminder()
+        else reminderStatus = "Notifications permission denied. Allow it in Android Settings."
+    }
 
     val installedApps = remember(context) {
         val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
@@ -521,6 +569,62 @@ private fun ToolsScreen(modifier: Modifier = Modifier) {
                         openIntent(createEvent, "Calendar event form opened. Review and save it.")
                     }) { Icon(Icons.Default.CalendarMonth, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Create calendar event") }
                     Text("These shortcuts open Google apps or Android Calendar. Direct account sync and Gmail, Drive, Photos data access need Google OAuth consent and will be added separately.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+
+        item {
+            Card(
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(
+                    Modifier.fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(9.dp)
+                ) {
+                    Text("JARVIS Automation & Reminders", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("Schedule a notification reminder. It can run even when JARVIS is closed.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedTextField(
+                        value = reminderTitle,
+                        onValueChange = { reminderTitle = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("Reminder title") }
+                    )
+                    OutlinedTextField(
+                        value = reminderMessage,
+                        onValueChange = { reminderMessage = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("Reminder details (optional)") }
+                    )
+                    OutlinedTextField(
+                        value = reminderMinutes,
+                        onValueChange = { reminderMinutes = it.filter(Char::isDigit).take(5) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("Remind me in how many minutes?") }
+                    )
+                    Button(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            if (Build.VERSION.SDK_INT >= 33 &&
+                                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                            ) {
+                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                scheduleReminder()
+                            }
+                        }
+                    ) {
+                        Icon(Icons.Default.CalendarMonth, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Schedule reminder")
+                    }
+                    if (reminderStatus.isNotBlank()) {
+                        Text(reminderStatus, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text("Reminders use Android WorkManager and notification permission. Delivery time can be delayed by battery optimization.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
