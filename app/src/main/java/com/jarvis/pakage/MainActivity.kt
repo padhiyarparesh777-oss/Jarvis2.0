@@ -1,6 +1,10 @@
 package com.jarvis.pakage
 
 import android.content.Context
+import androidx.compose.ui.layout.ContentScale
+import android.graphics.BitmapFactory
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.foundation.Image as ComposeImage
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
@@ -692,27 +696,86 @@ private fun ToolsScreen(modifier: Modifier = Modifier) {
 
 @Composable
 private fun VideoStudioScreen(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    var selectedPhoto by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var reelText by rememberSaveable { mutableStateOf("") }
+    var duration by rememberSaveable { mutableStateOf("15") }
+    var status by rememberSaveable { mutableStateOf("Choose a photo to start your daily reel.") }
+    val photoPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        selectedPhoto = uri
+        status = if (uri != null) "Photo selected. Add your reel caption." else "No photo selected."
+    }
+    val photoBitmap = remember(selectedPhoto) {
+        selectedPhoto?.let { uri ->
+            runCatching {
+                context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+            }.getOrNull()
+        }
+    }
+
     LazyColumn(modifier = modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Text("Daily Reel Maker", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text("Your simple photo + text video workflow.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Create a 9:16 devotional or social reel draft.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         item {
             Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-                Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Icon(Icons.Default.Movie, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(34.dp))
-                    Text("Daily Reel Template", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text("New photo • New text • Slow zoom • Fade in/out • 9:16 MP4", style = MaterialTheme.typography.bodyMedium)
-                    Text("FFmpeg rendering and automatic Gallery export are planned for Phase 6.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Reel project", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    if (photoBitmap != null) {
+                        ComposeImage(
+                            bitmap = photoBitmap.asImageBitmap(),
+                            contentDescription = "Selected reel photo",
+                            modifier = Modifier.fillMaxWidth().height(260.dp).clip(RoundedCornerShape(16.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Box(
+                            Modifier.fillMaxWidth().height(170.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(42.dp), tint = MaterialTheme.colorScheme.primary)
+                                Text("Your 9:16 photo preview")
+                            }
+                        }
+                    }
+                    Button(modifier = Modifier.fillMaxWidth(), onClick = { photoPicker.launch("image/*") }) {
+                        Icon(Icons.Default.Image, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (selectedPhoto == null) "Choose photo" else "Change photo")
+                    }
+                    OutlinedTextField(
+                        value = reelText,
+                        onValueChange = { reelText = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Reel caption / on-screen text") },
+                        minLines = 2
+                    )
+                    OutlinedTextField(
+                        value = duration,
+                        onValueChange = { duration = it.filter(Char::isDigit).take(3) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("Video duration in seconds (5–60)") }
+                    )
+                    Text(
+                        "Format: 9:16 vertical • Photo + caption • Slow zoom template planned",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(status, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
         item {
             Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.Image, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp))
-                    Text("Photo library", fontWeight = FontWeight.SemiBold)
-                    Text("Choose a daily image source and text style when the video module is implemented.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Next: Render & export", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("This first Phase 6 step creates a reel project draft with a selected photo, caption and duration. MP4 rendering, audio, transitions and Gallery export are the next implementation tasks.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
