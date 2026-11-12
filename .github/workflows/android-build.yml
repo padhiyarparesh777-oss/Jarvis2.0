@@ -5,9 +5,13 @@ on:
   pull_request:
     branches: [ "main" ]
   workflow_dispatch:
+
 jobs:
   debug-build:
     runs-on: ubuntu-latest
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK 17
