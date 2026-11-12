@@ -283,7 +283,7 @@ private fun HomeScreen(
                     Spacer(Modifier.height(10.dp))
                     Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.secondaryContainer) {
                         Text(
-                            "●  Hybrid AI • UI preview",
+                            "●  Gemini 3.8 Flash • Groq GPT-OSS fallback",
                             modifier = Modifier.padding(horizontal = 13.dp, vertical = 7.dp),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
@@ -604,7 +604,7 @@ private fun SettingsScreen(
                     Text("App information", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text("JARVIS 2.0", fontWeight = FontWeight.Medium)
                     Text("Package: com.jarvis.pakage", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Version: 1.0.0 • Phase 1 UI foundation", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("JARVIS 2.0 • Phone Manager development", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
